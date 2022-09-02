@@ -8,19 +8,19 @@ pub trait TextBuffer {
     /// Can this text be edited?
     fn is_mutable(&self) -> bool;
 
-    /// Returns this buffer as a `str`.
-    fn as_str(&self) -> &str;
+    /// Returns this buffer as a String
+    fn as_string(&self) -> &String;
 
     /// Reads the given character range.
-    fn char_range(&self, char_range: Range<usize>) -> &str {
+    fn char_range(&self, char_range: Range<usize>) -> String {
         assert!(char_range.start <= char_range.end);
         let start_byte = self.byte_index_from_char_index(char_range.start);
         let end_byte = self.byte_index_from_char_index(char_range.end);
-        &self.as_str()[start_byte..end_byte]
+        self.as_string()[start_byte..end_byte].to_owned()
     }
 
     fn byte_index_from_char_index(&self, char_index: usize) -> usize {
-        byte_index_from_char_index(self.as_str(), char_index)
+        byte_index_from_char_index(&self.as_string(), char_index)
     }
 
     /// Inserts text `text` into this buffer at character index `char_index`.
@@ -40,7 +40,7 @@ pub trait TextBuffer {
 
     /// Clears all characters in this buffer
     fn clear(&mut self) {
-        self.delete_char_range(0..self.as_str().len());
+        self.delete_char_range(0..self.as_string().len());
     }
 
     /// Replaces all contents of this string with `text`
@@ -51,7 +51,7 @@ pub trait TextBuffer {
 
     /// Clears all characters in this buffer and returns a string of the contents.
     fn take(&mut self) -> String {
-        let s = self.as_str().to_owned();
+        let s = (*self.as_string()).clone();
         self.clear();
         s
     }
@@ -62,8 +62,8 @@ impl TextBuffer for String {
         true
     }
 
-    fn as_str(&self) -> &str {
-        self.as_ref()
+    fn as_string(&self) -> &String {
+        &self
     }
 
     fn insert_text(&mut self, text: &str, char_index: usize) -> usize {
@@ -106,8 +106,8 @@ impl<'a> TextBuffer for &'a str {
         false
     }
 
-    fn as_str(&self) -> &str {
-        self
+    fn as_string(&self) -> &String {
+        self.as_string()
     }
 
     fn insert_text(&mut self, _text: &str, _ch_idx: usize) -> usize {
