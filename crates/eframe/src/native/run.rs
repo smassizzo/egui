@@ -83,7 +83,10 @@ fn run_and_return(event_loop: &mut EventLoop<RequestRepaintEvent>, mut winit_app
 
     event_loop.run_return(|event, event_loop, control_flow| {
         let event_result = match &event {
-            winit::event::Event::LoopDestroyed => EventResult::Exit,
+            winit::event::Event::LoopDestroyed => {
+                tracing::debug!("winit::event::Event::LoopDestroyed");
+                EventResult::Exit
+            }
 
             // Platform-dependent event handlers to workaround a winit bug
             // See: https://github.com/rust-windowing/winit/issues/987
@@ -117,13 +120,17 @@ fn run_and_return(event_loop: &mut EventLoop<RequestRepaintEvent>, mut winit_app
         match event_result {
             EventResult::Wait => {}
             EventResult::RepaintAsap => {
-                tracing::debug!("Repaint caused by winit::Event: {:?}", event);
+                tracing::trace!("Repaint caused by winit::Event: {:?}", event);
                 next_repaint_time = Instant::now();
             }
             EventResult::RepaintAt(repaint_time) => {
                 next_repaint_time = next_repaint_time.min(repaint_time);
             }
             EventResult::Exit => {
+                // On Cmd-Q we get here and then `run_return` doesn't return,
+                // so we need to save state now:
+                tracing::debug!("Exiting event loop - saving app state…");
+                winit_app.save_and_destroy();
                 *control_flow = ControlFlow::Exit;
                 return;
             }
@@ -145,11 +152,10 @@ fn run_and_return(event_loop: &mut EventLoop<RequestRepaintEvent>, mut winit_app
 
     tracing::debug!("eframe window closed");
 
-    winit_app.save_and_destroy();
-
     drop(winit_app);
 
-    // Needed to clean the event_loop:
+    // On Windows this clears out events so that we can later create another window.
+    // See https://github.com/emilk/egui/pull/1889 for details.
     event_loop.run_return(|_, _, control_flow| {
         control_flow.set_exit();
     });
@@ -337,8 +343,9 @@ mod glow_integration {
             );
             let gl = Arc::new(gl);
 
-            let painter = egui_glow::Painter::new(gl.clone(), None, "")
-                .unwrap_or_else(|error| panic!("some OpenGL error occurred {}\n", error));
+            let painter =
+                egui_glow::Painter::new(gl.clone(), None, "", self.native_options.shader_version)
+                    .unwrap_or_else(|error| panic!("some OpenGL error occurred {}\n", error));
 
             let system_theme = self.native_options.system_theme();
             let mut integration = epi_integration::EpiIntegration::new(
@@ -400,7 +407,7 @@ mod glow_integration {
         }
 
         fn save_and_destroy(&mut self) {
-            if let Some(running) = &mut self.running {
+            if let Some(mut running) = self.running.take() {
                 running
                     .integration
                     .save(running.app.as_mut(), running.gl_window.window());
@@ -682,6 +689,12 @@ mod wgpu_integration {
             storage: Option<Box<dyn epi::Storage>>,
             window: winit::window::Window,
         ) {
+            let mut limits = wgpu::Limits::downlevel_webgl2_defaults();
+            if self.native_options.depth_buffer > 0 {
+                // When using a depth buffer, we have to be able to create a texture large enough for the entire surface.
+                limits.max_texture_dimension_2d = 8192;
+            }
+
             #[allow(unsafe_code, unused_mut, unused_unsafe)]
             let painter = unsafe {
                 let mut painter = egui_wgpu::winit::Painter::new(
@@ -690,10 +703,11 @@ mod wgpu_integration {
                     wgpu::DeviceDescriptor {
                         label: None,
                         features: wgpu::Features::default(),
-                        limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                        limits,
                     },
                     wgpu::PresentMode::Fifo,
                     self.native_options.multisampling.max(1) as _,
+                    self.native_options.depth_buffer,
                 );
                 painter.set_window(Some(&window));
                 painter
@@ -764,7 +778,7 @@ mod wgpu_integration {
         }
 
         fn save_and_destroy(&mut self) {
-            if let Some(running) = &mut self.running {
+            if let Some(mut running) = self.running.take() {
                 if let Some(window) = &self.window {
                     running.integration.save(running.app.as_mut(), window);
                 }

@@ -259,6 +259,10 @@ pub struct NativeOptions {
     /// Sets the number of bits in the depth buffer.
     ///
     /// `egui` doesn't need the depth buffer, so the default value is 0.
+    ///
+    /// On `wgpu` backends, due to limited depth texture format options, this
+    /// will be interpreted as a boolean (non-zero = true) for whether or not
+    /// specifically a `Depth32Float` buffer is used.
     pub depth_buffer: u8,
 
     /// Sets the number of bits in the stencil buffer.
@@ -266,7 +270,7 @@ pub struct NativeOptions {
     /// `egui` doesn't need the stencil buffer, so the default value is 0.
     pub stencil_buffer: u8,
 
-    /// Specify wether or not hardware acceleration is preferred, required, or not.
+    /// Specify whether or not hardware acceleration is preferred, required, or not.
     ///
     /// Default: [`HardwareAcceleration::Preferred`].
     pub hardware_acceleration: HardwareAcceleration,
@@ -311,6 +315,13 @@ pub struct NativeOptions {
     ///
     /// Note: A [`NativeOptions`] clone will not include any `event_loop_builder` hook.
     pub event_loop_builder: Option<EventLoopBuilderHook>,
+
+    #[cfg(feature = "glow")]
+    /// Needed for cross compiling for VirtualBox VMSVGA driver with OpenGL ES 2.0 and OpenGL 2.1 which doesn't support SRGB texture.
+    /// See <https://github.com/emilk/egui/pull/1993>.
+    ///
+    /// For OpenGL ES 2.0: set this to [`egui_glow::ShaderVersion::Es100`] to solve blank texture problem (by using the "fallback shader").
+    pub shader_version: Option<egui_glow::ShaderVersion>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -350,6 +361,8 @@ impl Default for NativeOptions {
             default_theme: Theme::Dark,
             run_and_return: true,
             event_loop_builder: None,
+            #[cfg(feature = "glow")]
+            shader_version: None,
         }
     }
 }

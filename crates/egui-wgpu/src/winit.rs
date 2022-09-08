@@ -4,7 +4,7 @@ use egui::mutex::RwLock;
 use tracing::error;
 use wgpu::{Adapter, Instance, Surface};
 
-use crate::renderer;
+use crate::{renderer, Renderer};
 
 /// Access to the render state for egui, which can be useful in combination with
 /// [`egui::PaintCallback`]s for custom rendering using WGPU.
@@ -13,7 +13,7 @@ pub struct RenderState {
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
     pub target_format: wgpu::TextureFormat,
-    pub egui_rpass: Arc<RwLock<renderer::RenderPass>>,
+    pub renderer: Arc<RwLock<Renderer>>,
 }
 
 struct SurfaceState {
@@ -30,6 +30,7 @@ pub struct Painter<'a> {
     device_descriptor: wgpu::DeviceDescriptor<'a>,
     present_mode: wgpu::PresentMode,
     msaa_samples: u32,
+    depth_bits: u8,
 
     instance: Instance,
     adapter: Option<Adapter>,
@@ -56,6 +57,7 @@ impl<'a> Painter<'a> {
         device_descriptor: wgpu::DeviceDescriptor<'a>,
         present_mode: wgpu::PresentMode,
         msaa_samples: u32,
+        depth_bits: u8,
     ) -> Self {
         let instance = wgpu::Instance::new(backends);
 
@@ -64,6 +66,7 @@ impl<'a> Painter<'a> {
             device_descriptor,
             present_mode,
             msaa_samples,
+            depth_bits,
 
             instance,
             adapter: None,
@@ -87,13 +90,13 @@ impl<'a> Painter<'a> {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&self.device_descriptor, None)).unwrap();
 
-        let rpass = renderer::RenderPass::new(&device, target_format, self.msaa_samples);
+        let renderer = Renderer::new(&device, target_format, self.msaa_samples, self.depth_bits);
 
         RenderState {
             device: Arc::new(device),
             queue: Arc::new(queue),
             target_format,
-            egui_rpass: Arc::new(RwLock::new(rpass)),
+            renderer: Arc::new(RwLock::new(renderer)),
         }
     }
 
@@ -145,6 +148,14 @@ impl<'a> Painter<'a> {
             .configure(&render_state.device, &config);
         surface_state.width = width_in_pixels;
         surface_state.height = height_in_pixels;
+
+        if self.depth_bits > 0 {
+            render_state.renderer.write().update_depth_texture(
+                &render_state.device,
+                width_in_pixels,
+                height_in_pixels,
+            );
+        }
     }
 
     /// Updates (or clears) the [`winit::window::Window`] associated with the [`Painter`]
@@ -260,12 +271,17 @@ impl<'a> Painter<'a> {
         };
 
         {
-            let mut rpass = render_state.egui_rpass.write();
+            let mut renderer = render_state.renderer.write();
             for (id, image_delta) in &textures_delta.set {
-                rpass.update_texture(&render_state.device, &render_state.queue, *id, image_delta);
+                renderer.update_texture(
+                    &render_state.device,
+                    &render_state.queue,
+                    *id,
+                    image_delta,
+                );
             }
 
-            rpass.update_buffers(
+            renderer.update_buffers(
                 &render_state.device,
                 &render_state.queue,
                 clipped_primitives,
@@ -274,7 +290,7 @@ impl<'a> Painter<'a> {
         }
 
         // Record all render passes.
-        render_state.egui_rpass.read().execute(
+        render_state.renderer.read().render(
             &mut encoder,
             &output_view,
             clipped_primitives,
@@ -288,9 +304,9 @@ impl<'a> Painter<'a> {
         );
 
         {
-            let mut rpass = render_state.egui_rpass.write();
+            let mut renderer = render_state.renderer.write();
             for id in &textures_delta.free {
-                rpass.free_texture(id);
+                renderer.free_texture(id);
             }
         }
 
