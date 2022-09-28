@@ -252,6 +252,9 @@ pub struct Spacing {
     /// Button size is text size plus this on each side
     pub button_padding: Vec2,
 
+    /// Horizontal and vertical margins within a menu frame.
+    pub menu_margin: Margin,
+
     /// Indent collapsing regions etc by this much.
     pub indent: f32,
 
@@ -599,25 +602,16 @@ pub struct DebugOptions {
 
 /// The default text styles of the default egui theme.
 pub fn default_text_styles() -> BTreeMap<TextStyle, FontId> {
-    let mut text_styles = BTreeMap::new();
-    text_styles.insert(
-        TextStyle::Small,
-        FontId::new(10.0, FontFamily::Proportional),
-    );
-    text_styles.insert(TextStyle::Body, FontId::new(14.0, FontFamily::Proportional));
-    text_styles.insert(
-        TextStyle::Button,
-        FontId::new(14.0, FontFamily::Proportional),
-    );
-    text_styles.insert(
-        TextStyle::Heading,
-        FontId::new(20.0, FontFamily::Proportional),
-    );
-    text_styles.insert(
-        TextStyle::Monospace,
-        FontId::new(14.0, FontFamily::Monospace),
-    );
-    text_styles
+    use FontFamily::{Monospace, Proportional};
+
+    [
+        (TextStyle::Small, FontId::new(9.0, Proportional)),
+        (TextStyle::Body, FontId::new(12.5, Proportional)),
+        (TextStyle::Button, FontId::new(12.5, Proportional)),
+        (TextStyle::Heading, FontId::new(18.0, Proportional)),
+        (TextStyle::Monospace, FontId::new(12.0, Monospace)),
+    ]
+    .into()
 }
 
 impl Default for Style {
@@ -642,6 +636,7 @@ impl Default for Spacing {
         Self {
             item_spacing: vec2(8.0, 3.0),
             window_margin: Margin::same(6.0),
+            menu_margin: Margin::same(1.0),
             button_padding: vec2(4.0, 1.0),
             indent: 18.0, // match checkbox/radio-button with `button_padding.x + icon_width + icon_spacing`
             interact_size: vec2(40.0, 18.0),
@@ -923,6 +918,7 @@ impl Spacing {
         let Self {
             item_spacing,
             window_margin,
+            menu_margin,
             button_padding,
             indent,
             interact_size,
@@ -963,10 +959,39 @@ impl Spacing {
             );
             ui.add(
                 DragValue::new(&mut window_margin.bottom)
-                    .clamp_range(margin_range)
+                    .clamp_range(margin_range.clone())
                     .prefix("bottom: "),
             );
             ui.label("Window margins y");
+        });
+
+        ui.horizontal(|ui| {
+            ui.add(
+                DragValue::new(&mut menu_margin.left)
+                    .clamp_range(margin_range.clone())
+                    .prefix("left: "),
+            );
+            ui.add(
+                DragValue::new(&mut menu_margin.right)
+                    .clamp_range(margin_range.clone())
+                    .prefix("right: "),
+            );
+
+            ui.label("Menu margins x");
+        });
+
+        ui.horizontal(|ui| {
+            ui.add(
+                DragValue::new(&mut menu_margin.top)
+                    .clamp_range(margin_range.clone())
+                    .prefix("top: "),
+            );
+            ui.add(
+                DragValue::new(&mut menu_margin.bottom)
+                    .clamp_range(margin_range)
+                    .prefix("bottom: "),
+            );
+            ui.label("Menu margins y");
         });
 
         ui.add(slider_vec2(button_padding, 0.0..=20.0, "Button padding"));

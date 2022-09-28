@@ -5,11 +5,14 @@ NOTE: [`egui-winit`](../egui-winit/CHANGELOG.md), [`egui_glium`](../egui_glium/C
 
 
 ## Unreleased
+* Added `NativeOptions::fullsize_content` option on Mac to build titlebar-less windows with floating window controls ([#2049](https://github.com/emilk/egui/pull/2049)).
 * Added `NativeOptions::event_loop_builder` hook for apps to change platform specific event loop options ([#1952](https://github.com/emilk/egui/pull/1952)).
 * Enabled deferred render state initialization to support Android ([#1952](https://github.com/emilk/egui/pull/1952)).
 * Allow empty textures with the glow renderer.
 * Added `shader_version` to `NativeOptions` for cross compiling support on different target OpenGL | ES versions (on native `glow` renderer only) ([#1993](https://github.com/emilk/egui/pull/1993)).
-* Fix: app state is now saved when user presses Cmd-Q on Mac ([#1993](https://github.com/emilk/egui/pull/1993)).
+* Fix: app state is now saved when user presses Cmd-Q on Mac ([#2013](https://github.com/emilk/egui/pull/2013)).
+* Added `center` to `NativeOptions` and `monitor_size` to `WindowInfo` on desktop ([#2035](https://github.com/emilk/egui/pull/2035)).
+* Web: you can access your application from JS using `AppRunner::app_mut`. See `crates/egui_demo_app/src/lib.rs`.
 
 
 ## 0.19.0 - 2022-08-20

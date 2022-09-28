@@ -6,6 +6,9 @@
 
 #![warn(missing_docs)] // Let's keep `epi` well-documented.
 
+#[cfg(target_arch = "wasm32")]
+use std::any::Any;
+
 #[cfg(not(target_arch = "wasm32"))]
 pub use crate::native::run::RequestRepaintEvent;
 #[cfg(not(target_arch = "wasm32"))]
@@ -65,6 +68,26 @@ pub trait App {
     ///
     /// To force a repaint, call [`egui::Context::request_repaint`] at any time (e.g. from another thread).
     fn update(&mut self, ctx: &egui::Context, frame: &mut Frame);
+
+    /// Get a handle to the app.
+    ///
+    /// Can be used from web to interact or other external context.
+    ///
+    /// You need to implement this if you want to be able to access the application from JS using [`AppRunner::app_mut`].
+    ///
+    /// This is needed because downcasting Box<dyn App> -> Box<dyn Any> to get &ConcreteApp is not simple in current rust.
+    ///
+    /// Just copy-paste this as your implementation:
+    /// ```ignore
+    /// #[cfg(target_arch = "wasm32")]
+    /// fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+    ///     Some(&mut *self)
+    /// }
+    /// ```
+    #[cfg(target_arch = "wasm32")]
+    fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+        None
+    }
 
     /// Called on shutdown, and perhaps at regular intervals. Allows you to save state.
     ///
@@ -190,7 +213,7 @@ pub enum HardwareAcceleration {
 /// Only a single native window is currently supported.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct NativeOptions {
-    /// Sets whether or not the window will always be on top of other windows.
+    /// Sets whether or not the window will always be on top of other windows at initialization.
     pub always_on_top: bool,
 
     /// Show window in maximized mode
@@ -204,6 +227,13 @@ pub struct NativeOptions {
     ///
     /// Default: `false`.
     pub fullscreen: bool,
+
+    /// On Mac: the window doesn't have a titlebar, but floating window buttons.
+    ///
+    /// See [winit's documentation][with_fullsize_content_view] for information on Mac-specific options.
+    ///
+    /// [with_fullsize_content_view]: https://docs.rs/winit/latest/x86_64-apple-darwin/winit/platform/macos/trait.WindowBuilderExtMacOS.html#tymethod.with_fullsize_content_view
+    pub fullsize_content: bool,
 
     /// On Windows: enable drag and drop support. Drag and drop can
     /// not be disabled on other platforms.
@@ -322,6 +352,13 @@ pub struct NativeOptions {
     ///
     /// For OpenGL ES 2.0: set this to [`egui_glow::ShaderVersion::Es100`] to solve blank texture problem (by using the "fallback shader").
     pub shader_version: Option<egui_glow::ShaderVersion>,
+
+    /// On desktop: make the window position to be centered at initialization.
+    ///
+    /// Platform specific:
+    ///
+    /// Wayland desktop currently not supported.
+    pub centered: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -343,6 +380,7 @@ impl Default for NativeOptions {
             maximized: false,
             decorated: true,
             fullscreen: false,
+            fullsize_content: false,
             drag_and_drop_support: true,
             icon_data: None,
             initial_window_pos: None,
@@ -363,6 +401,7 @@ impl Default for NativeOptions {
             event_loop_builder: None,
             #[cfg(feature = "glow")]
             shader_version: None,
+            centered: false,
         }
     }
 }
@@ -686,6 +725,29 @@ impl Frame {
         self.output.visible = Some(visible);
     }
 
+    /// On desktop: Set the window always on top.
+    ///
+    /// (Wayland desktop currently not supported)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_always_on_top(&mut self, always_on_top: bool) {
+        self.output.always_on_top = Some(always_on_top);
+    }
+
+    /// On desktop: Set the window to be centered.
+    ///
+    /// (Wayland desktop currently not supported)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_centered(&mut self) {
+        if let Some(monitor_size) = self.info.window_info.monitor_size {
+            let inner_size = self.info.window_info.size;
+            if monitor_size.x > 1.0 && monitor_size.y > 1.0 {
+                let x = (monitor_size.x - inner_size.x) / 2.0;
+                let y = (monitor_size.y - inner_size.y) / 2.0;
+                self.set_window_pos(egui::Pos2 { x, y });
+            }
+        }
+    }
+
     /// for integrations only: call once per frame
     pub(crate) fn take_app_output(&mut self) -> backend::AppOutput {
         std::mem::take(&mut self.output)
@@ -716,6 +778,9 @@ pub struct WindowInfo {
 
     /// Window inner size in egui points (logical pixels).
     pub size: egui::Vec2,
+
+    /// Current monitor size in egui points (logical pixels)
+    pub monitor_size: Option<egui::Vec2>,
 }
 
 /// Information about the URL.
@@ -889,5 +954,9 @@ pub(crate) mod backend {
         /// Set to some bool to change window visibility.
         #[cfg(not(target_arch = "wasm32"))]
         pub visible: Option<bool>,
+
+        /// Set to some bool to tell the window always on top.
+        #[cfg(not(target_arch = "wasm32"))]
+        pub always_on_top: Option<bool>,
     }
 }

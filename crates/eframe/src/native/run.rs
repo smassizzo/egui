@@ -223,6 +223,27 @@ fn run_and_exit(
     })
 }
 
+fn centere_window_pos(
+    monitor: Option<winit::monitor::MonitorHandle>,
+    native_options: &mut epi::NativeOptions,
+) {
+    // Get the current_monitor.
+    if let Some(monitor) = monitor {
+        let monitor_size = monitor.size();
+        let inner_size = native_options
+            .initial_window_size
+            .unwrap_or(egui::Vec2 { x: 800.0, y: 600.0 });
+        if monitor_size.width > 0 && monitor_size.height > 0 {
+            let x = (monitor_size.width - inner_size.x as u32) / 2;
+            let y = (monitor_size.height - inner_size.y as u32) / 2;
+            native_options.initial_window_pos = Some(egui::Pos2 {
+                x: x as _,
+                y: y as _,
+            });
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 /// Run an egui app
 #[cfg(feature = "glow")]
@@ -317,7 +338,7 @@ mod glow_integration {
                     .with_hardware_acceleration(hardware_acceleration)
                     .with_depth_buffer(native_options.depth_buffer)
                     .with_multisampling(native_options.multisampling)
-                    .with_srgb(true)
+                    .with_srgb(false)
                     .with_stencil_buffer(native_options.stencil_buffer)
                     .with_vsync(native_options.vsync)
                     .build_windowed(window_builder, event_loop)
@@ -344,7 +365,7 @@ mod glow_integration {
             let gl = Arc::new(gl);
 
             let painter =
-                egui_glow::Painter::new(gl.clone(), None, "", self.native_options.shader_version)
+                egui_glow::Painter::new(gl.clone(), "", self.native_options.shader_version)
                     .unwrap_or_else(|error| panic!("some OpenGL error occurred {}\n", error));
 
             let system_theme = self.native_options.system_theme();
@@ -360,6 +381,8 @@ mod glow_integration {
             );
             let theme = system_theme.unwrap_or(self.native_options.default_theme);
             integration.egui_ctx.set_visuals(theme.egui_visuals());
+
+            gl_window.window().set_ime_allowed(true);
 
             {
                 let event_loop_proxy = self.repaint_proxy.clone();
@@ -586,13 +609,22 @@ mod glow_integration {
         app_creator: epi::AppCreator,
     ) {
         if native_options.run_and_return {
-            with_event_loop(native_options, |event_loop, native_options| {
+            with_event_loop(native_options, |event_loop, mut native_options| {
+                if native_options.centered {
+                    centere_window_pos(event_loop.available_monitors().next(), &mut native_options);
+                }
+
                 let glow_eframe =
                     GlowWinitApp::new(event_loop, app_name, native_options, app_creator);
                 run_and_return(event_loop, glow_eframe);
             });
         } else {
             let event_loop = create_event_loop_builder(&mut native_options).build();
+
+            if native_options.centered {
+                centere_window_pos(event_loop.available_monitors().next(), &mut native_options);
+            }
+
             let glow_eframe = GlowWinitApp::new(&event_loop, app_name, native_options, app_creator);
             run_and_exit(event_loop, glow_eframe);
         }
@@ -728,6 +760,8 @@ mod wgpu_integration {
             );
             let theme = system_theme.unwrap_or(self.native_options.default_theme);
             integration.egui_ctx.set_visuals(theme.egui_visuals());
+
+            window.set_ime_allowed(true);
 
             {
                 let event_loop_proxy = self.repaint_proxy.clone();
@@ -955,13 +989,22 @@ mod wgpu_integration {
         app_creator: epi::AppCreator,
     ) {
         if native_options.run_and_return {
-            with_event_loop(native_options, |event_loop, native_options| {
+            with_event_loop(native_options, |event_loop, mut native_options| {
+                if native_options.centered {
+                    centere_window_pos(event_loop.available_monitors().next(), &mut native_options);
+                }
+
                 let wgpu_eframe =
                     WgpuWinitApp::new(event_loop, app_name, native_options, app_creator);
                 run_and_return(event_loop, wgpu_eframe);
             });
         } else {
             let event_loop = create_event_loop_builder(&mut native_options).build();
+
+            if native_options.centered {
+                centere_window_pos(event_loop.available_monitors().next(), &mut native_options);
+            }
+
             let wgpu_eframe = WgpuWinitApp::new(&event_loop, app_name, native_options, app_creator);
             run_and_exit(event_loop, wgpu_eframe);
         }

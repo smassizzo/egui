@@ -1,5 +1,8 @@
 use winit::event_loop::EventLoopWindowTarget;
 
+#[cfg(target_os = "macos")]
+use winit::platform::macos::WindowBuilderExtMacOS as _;
+
 use egui_winit::{native_pixels_per_point, EventResponse, WindowSettings};
 
 use crate::{epi, Theme, WindowInfo};
@@ -18,6 +21,14 @@ pub fn read_window_info(window: &winit::window::Window, pixels_per_point: f32) -
         .map(|pos| pos.to_logical::<f32>(pixels_per_point.into()))
         .map(|pos| egui::Pos2 { x: pos.x, y: pos.y });
 
+    let monitor = window.current_monitor().is_some();
+    let monitor_size = if monitor {
+        let size = window.current_monitor().unwrap().size();
+        Some(egui::vec2(size.width as _, size.height as _))
+    } else {
+        None
+    };
+
     let size = window
         .inner_size()
         .to_logical::<f32>(pixels_per_point.into());
@@ -29,6 +40,7 @@ pub fn read_window_info(window: &winit::window::Window, pixels_per_point: f32) -
             x: size.width,
             y: size.height,
         },
+        monitor_size,
     }
 }
 
@@ -41,6 +53,8 @@ pub fn window_builder(
         maximized,
         decorated,
         fullscreen,
+        #[cfg(target_os = "macos")]
+        fullsize_content,
         drag_and_drop_support,
         icon_data,
         initial_window_pos,
@@ -62,6 +76,14 @@ pub fn window_builder(
         .with_resizable(*resizable)
         .with_transparent(*transparent)
         .with_window_icon(window_icon);
+
+    #[cfg(target_os = "macos")]
+    if *fullsize_content {
+        window_builder = window_builder
+            .with_title_hidden(true)
+            .with_titlebar_transparent(true)
+            .with_fullsize_content_view(true);
+    }
 
     if let Some(min_size) = *min_window_size {
         window_builder = window_builder.with_min_inner_size(points_to_size(min_size));
@@ -125,6 +147,7 @@ pub fn handle_app_output(
         drag_window,
         window_pos,
         visible,
+        always_on_top,
     } = app_output;
 
     if let Some(decorated) = decorated {
@@ -162,6 +185,10 @@ pub fn handle_app_output(
 
     if let Some(visible) = visible {
         window.set_visible(visible);
+    }
+
+    if let Some(always_on_top) = always_on_top {
+        window.set_always_on_top(always_on_top);
     }
 }
 

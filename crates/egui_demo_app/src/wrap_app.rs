@@ -3,6 +3,9 @@ use egui_demo_lib::is_mobile;
 #[cfg(feature = "glow")]
 use eframe::glow;
 
+#[cfg(target_arch = "wasm32")]
+use core::any::Any;
+
 #[derive(Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 struct EasyMarkApp {
@@ -224,6 +227,11 @@ impl eframe::App for WrapApp {
         if let Some(custom3d) = &mut self.custom3d {
             custom3d.on_exit(gl);
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+        Some(&mut *self)
     }
 }
 
